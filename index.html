@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Fishing Game PRO</title>
+  <title>Fishing Game Complete</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
 </head>
 <body style="margin:0">
@@ -13,170 +13,208 @@ const config = {
   width: 800,
   height: 600,
   backgroundColor: '#6ec6ff',
-  physics: {
-    default: 'arcade',
-    arcade: { debug: false }
-  },
+  physics: { default: 'arcade', arcade: { debug:false } },
   scene: { preload, create, update }
 };
 
-let hook, fishes, cursors;
-let isDropping = false;
-let score = 0;
-let target = 7;
-let lives = 3;
-let timeLeft = 30;
-let gameOver = false;
-let caughtThisDrop = false;
+let hook, line, fishes, cursors;
+let isDropping=false, isRising=false, isStopped=false;
+let caughtThisDrop=false;
 
-let scoreText, targetText, livesText, timeText, statusText;
+let score=0, target=10, lives=3, timeLeft=40;
+let scoreText,targetText,livesText,timeText,statusText;
+let gameState="MENU";
+let sceneRef;
 
 new Phaser.Game(config);
 
-function preload() {
-  this.load.image('boat', 'https://labs.phaser.io/assets/sprites/ship.png');
-  this.load.image('hook', 'https://labs.phaser.io/assets/sprites/arrow.png');
-  this.load.image('fish', 'https://labs.phaser.io/assets/sprites/fish-136x80.png');
+function preload(){
+  this.load.image('hook','https://labs.phaser.io/assets/sprites/hook.png');
+  this.load.image('fish','https://labs.phaser.io/assets/sprites/fish-136x80.png');
 }
 
-function create() {
-  this.add.rectangle(400, 350, 800, 500, 0x1e90ff);
+function create(){
+  sceneRef=this;
 
-  this.add.image(400, 80, 'boat').setScale(0.5);
+  // Laut
+  this.add.rectangle(400,350,800,500,0x1e90ff);
 
-  hook = this.physics.add.image(400, 120, 'hook')
-    .setScale(0.3)
-    .setAngle(180);
-  hook.body.allowGravity = false;
-
-  cursors = this.input.keyboard.createCursorKeys();
-
-  fishes = this.physics.add.group();
-
-  this.time.addEvent({
-    delay: 1200,
-    loop: true,
-    callback: () => {
-      if (!gameOver) spawnFish(this);
-    }
-  });
-
-  // Timer
-  this.time.addEvent({
-    delay: 1000,
-    loop: true,
-    callback: () => {
-      if (!gameOver) {
-        timeLeft--;
-        timeText.setText('Time: ' + timeLeft);
-
-        if (timeLeft <= 0) {
-          statusText.setText('WAKTU HABIS!');
-          endGame();
-        }
-      }
-    }
-  });
-
-  // Klik turunin kail
-  this.input.on('pointerdown', () => {
-    if (!isDropping && !gameOver) {
-      isDropping = true;
-      caughtThisDrop = false;
-      hook.setVelocityY(260);
-    }
-  });
-
-  scoreText = this.add.text(10, 10, 'Score: 0', { font: '20px Arial', fill: '#000' });
-  targetText = this.add.text(10, 35, 'Target: ' + target, { font: '20px Arial', fill: '#000' });
-  livesText = this.add.text(10, 60, 'Lives: 3', { font: '20px Arial', fill: '#000' });
-  timeText = this.add.text(10, 85, 'Time: 30', { font: '20px Arial', fill: '#000' });
-
-  statusText = this.add.text(400, 300, '', {
-    font: '42px Arial',
-    fill: '#ff0000'
+  // PERAHU 
+  this.add.text(400,80,"🚤",{
+    font:"60px Arial"
   }).setOrigin(0.5);
 
-  this.physics.add.overlap(hook, fishes, catchFish, null, this);
-}
+  cursors=this.input.keyboard.createCursorKeys();
 
-function update() {
-  if (gameOver) return;
+  hook=this.physics.add.image(400,130,'hook').setScale(0.15);
+  hook.body.allowGravity=false;
 
-  // Gerak kiri kanan
-  if (!isDropping) {
-    if (cursors.left.isDown) hook.x -= 5;
-    if (cursors.right.isDown) hook.x += 5;
-  }
+  line=this.add.graphics();
+  fishes=this.physics.add.group();
 
-  // Sampai bawah
-  if (hook.y > 550) {
-    if (!caughtThisDrop) {
-      lives--;
-      livesText.setText('Lives: ' + lives);
+  // UI
+  scoreText=this.add.text(10,10,"Score:0",{font:"20px Arial",fill:"#000"});
+  targetText=this.add.text(10,35,"Target:"+target,{font:"20px Arial",fill:"#000"});
+  livesText=this.add.text(10,60,"Lives:"+lives,{font:"20px Arial",fill:"#000"});
+  timeText=this.add.text(10,85,"Time:"+timeLeft,{font:"20px Arial",fill:"#000"});
 
-      if (lives <= 0) {
-        statusText.setText('GAME OVER');
+  statusText=this.add.text(400,300,"",{font:"42px Arial",fill:"#ff0000"}).setOrigin(0.5);
+
+  // PLAY BUTTON
+  let playBtn=this.add.text(400,300,"PLAY",{font:"48px Arial",fill:"#000"})
+  .setOrigin(0.5).setInteractive();
+
+  playBtn.on("pointerdown",()=>{
+    gameState="PLAYING";
+    playBtn.destroy();
+  });
+
+  // PAUSE BUTTON
+  let pauseBtn=this.add.text(720,10,"PAUSE",{font:"20px Arial",fill:"#000"}).setInteractive();
+
+  pauseBtn.on("pointerdown",()=>{
+    if(gameState==="PLAYING"){
+      gameState="PAUSED";
+      pauseBtn.setText("RESUME");
+    }else if(gameState==="PAUSED"){
+      gameState="PLAYING";
+      pauseBtn.setText("PAUSE");
+    }
+  });
+
+  // SPAWN IKAN
+  this.time.addEvent({
+    delay:1200,
+    loop:true,
+    callback:()=>{
+      if(gameState==="PLAYING") spawnFish(this);
+    }
+  });
+
+  // TIMER
+  this.time.addEvent({
+    delay:1000,
+    loop:true,
+    callback:()=>{
+      if(gameState!=="PLAYING") return;
+      timeLeft--;
+      timeText.setText("Time:"+timeLeft);
+      if(timeLeft<=0){
+        statusText.setText("WAKTU HABIS");
         endGame();
       }
     }
-    hook.setVelocityY(-260);
+  });
+
+  // KLIK CONTROL: turun → stop → naik
+  this.input.on('pointerdown',()=>{
+    if(gameState!=="PLAYING") return;
+
+    if(!isDropping && !isRising && !isStopped){
+      isDropping=true;
+      caughtThisDrop=false;
+      hook.setVelocityY(220);
+    }
+    else if(isDropping){
+      isDropping=false;
+      isStopped=true;
+      hook.setVelocityY(0);
+    }
+    else if(isStopped){
+      isStopped=false;
+      isRising=true;
+      hook.setVelocityY(-220);
+    }
+  });
+
+  this.physics.add.overlap(hook,fishes,catchFish,null,this);
+}
+
+function update(){
+  if(gameState!=="PLAYING") return;
+
+  // Geser kiri kanan
+  if(!isDropping && !isRising){
+    if(cursors.left.isDown) hook.x-=4;
+    if(cursors.right.isDown) hook.x+=4;
   }
 
-  // Balik atas
-  if (hook.y <= 120 && isDropping) {
+  // Sampai atas
+  if(hook.y<=130 && isRising){
     hook.setVelocityY(0);
-    hook.y = 120;
-    isDropping = false;
+    hook.y=130;
+    isRising=false;
+    isStopped=false;
+
+    if(!caughtThisDrop){
+      lives--;
+      livesText.setText("Lives:"+lives);
+      if(lives<=0){
+        statusText.setText("GAME OVER");
+        endGame();
+      }
+    }
   }
+
+  // Batas bawah
+  if(hook.y>=560){
+    isDropping=false;
+    isRising=true;
+    hook.setVelocityY(-220);
+  }
+
+  // Gambar tali
+  line.clear();
+  line.lineStyle(2,0x000000);
+  line.beginPath();
+  line.moveTo(400,100);
+  line.lineTo(hook.x,hook.y);
+  line.strokePath();
 }
 
-function spawnFish(scene) {
-  let y = Phaser.Math.Between(220, 550);
-  let fish = fishes.create(Phaser.Math.Between(0, 800), y, 'fish');
+function spawnFish(scene){
+  let y=Phaser.Math.Between(220,550);
+  let fish=fishes.create(Phaser.Math.Between(0,800),y,'fish');
 
-  let isBig = Phaser.Math.Between(0, 3) === 0;
+  let big=Phaser.Math.Between(0,3)==0;
+  fish.points=big?3:1;
+  fish.setScale(big?0.45:0.25);
 
-  if (isBig) {
-    fish.setScale(0.45);
-    fish.points = 3;
-  } else {
-    fish.setScale(0.25);
-    fish.points = 1;
-  }
+  let speed=Phaser.Math.Between(60,140);
+  let dir=Phaser.Math.Between(0,1);
 
-  let speed = Phaser.Math.Between(60, 140);
-  let dir = Phaser.Math.Between(0, 1);
-
-  if (dir === 0) {
-    fish.setVelocityX(speed);
-    fish.setFlipX(true);
-  } else {
-    fish.setVelocityX(-speed);
-  }
+  if(dir==0){fish.setVelocityX(speed);fish.setFlipX(true);}
+  else{fish.setVelocityX(-speed);}
 }
 
-function catchFish(hook, fish) {
-  if (gameOver) return;
-
-  caughtThisDrop = true;
-  score += fish.points;
+function catchFish(hook,fish){
   fish.destroy();
+  score+=fish.points;
+  caughtThisDrop=true;
+  scoreText.setText("Score:"+score);
 
-  scoreText.setText('Score: ' + score);
+  isDropping=false;
+  isStopped=false;
+  isRising=true;
+  hook.setVelocityY(-220);
 
-  hook.setVelocityY(-260);
-
-  if (score >= target) {
-    statusText.setText('MENANG!');
+  if(score>=target){
+    statusText.setText("MENANG!");
     endGame();
   }
 }
 
-function endGame() {
-  gameOver = true;
+function endGame(){
+  gameState="OVER";
   hook.setVelocity(0);
-  fishes.clear(true, true);
+  fishes.clear(true,true);
+
+  let restartBtn=sceneRef.add.text(400,350,"RESTART",{font:"40px Arial",fill:"#000"})
+  .setOrigin(0.5).setInteractive();
+
+  restartBtn.on("pointerdown",()=>{
+    location.reload();
+  });
 }
 </script>
 
