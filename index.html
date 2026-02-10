@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Fishing Game - Phaser</title>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
+</head>
+<body style="margin:0">
+
+<script>
+const config = {
+  type: Phaser.AUTO,
+  width: 800,
+  height: 600,
+  backgroundColor: '#6ec6ff',
+  physics: {
+    default: 'arcade',
+    arcade: { debug: false }
+  },
+  scene: { preload, create, update }
+};
+
+let hook;
+let fishes;
+let isDropping = false;
+let score = 0;
+let scoreText;
+
+new Phaser.Game(config);
+
+function preload() {
+  this.load.image('boat', 'https://labs.phaser.io/assets/sprites/ship.png');
+  this.load.image('hook', 'https://labs.phaser.io/assets/sprites/arrow.png');
+  this.load.image('fish', 'https://labs.phaser.io/assets/sprites/fish-136x80.png');
+}
+
+function create() {
+  // Laut
+  this.add.rectangle(400, 350, 800, 500, 0x1e90ff);
+
+  // Perahu
+  this.add.image(400, 80, 'boat').setScale(0.5);
+
+  // Kail
+  hook = this.physics.add.image(400, 120, 'hook')
+    .setScale(0.3)
+    .setAngle(180);
+  hook.body.allowGravity = false;
+
+  // Group ikan
+  fishes = this.physics.add.group();
+
+  // Spawn ikan tiap 1.5 detik
+  this.time.addEvent({
+    delay: 1500,
+    loop: true,
+    callback: () => spawnFish(this)
+  });
+
+  // Klik untuk turunin kail
+  this.input.on('pointerdown', () => {
+    if (!isDropping) {
+      isDropping = true;
+      hook.setVelocityY(250);
+    }
+  });
+
+  // Score
+  scoreText = this.add.text(10, 10, 'Score: 0', {
+    font: '20px Arial',
+    fill: '#000'
+  });
+
+  // Collision
+  this.physics.add.overlap(hook, fishes, catchFish, null, this);
+}
+
+function update() {
+  // Kalau kail sampai bawah
+  if (hook.y > 550) {
+    hook.setVelocityY(-250);
+  }
+
+  // Kalau kail balik ke atas
+  if (hook.y <= 120 && isDropping) {
+    hook.setVelocityY(0);
+    hook.y = 120;
+    isDropping = false;
+  }
+}
+
+function spawnFish(scene) {
+  let y = Phaser.Math.Between(200, 550);
+  let fish = fishes.create(Phaser.Math.Between(0, 800), y, 'fish')
+    .setScale(0.3);
+
+  let speed = Phaser.Math.Between(50, 120);
+  let direction = Phaser.Math.Between(0, 1);
+
+  if (direction === 0) {
+    fish.setVelocityX(speed);
+    fish.setFlipX(true);
+  } else {
+    fish.setVelocityX(-speed);
+  }
+
+  fish.setCollideWorldBounds(false);
+}
+
+function catchFish(hook, fish) {
+  fish.destroy();
+  score += 10;
+  scoreText.setText('Score: ' + score);
+
+  // Kail langsung naik
+  hook.setVelocityY(-250);
+}
+</script>
+
+</body>
+</html>
