@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Fishing Game - Phaser</title>
+  <title>Fishing Game PRO</title>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.js"></script>
 </head>
 <body style="margin:0">
@@ -20,11 +20,16 @@ const config = {
   scene: { preload, create, update }
 };
 
-let hook;
-let fishes;
+let hook, fishes, cursors;
 let isDropping = false;
 let score = 0;
-let scoreText;
+let target = 7;
+let lives = 3;
+let timeLeft = 30;
+let gameOver = false;
+let caughtThisDrop = false;
+
+let scoreText, targetText, livesText, timeText, statusText;
 
 new Phaser.Game(config);
 
@@ -35,53 +40,90 @@ function preload() {
 }
 
 function create() {
-  // Laut
   this.add.rectangle(400, 350, 800, 500, 0x1e90ff);
 
-  // Perahu
   this.add.image(400, 80, 'boat').setScale(0.5);
 
-  // Kail
   hook = this.physics.add.image(400, 120, 'hook')
     .setScale(0.3)
     .setAngle(180);
   hook.body.allowGravity = false;
 
-  // Group ikan
+  cursors = this.input.keyboard.createCursorKeys();
+
   fishes = this.physics.add.group();
 
-  // Spawn ikan tiap 1.5 detik
   this.time.addEvent({
-    delay: 1500,
+    delay: 1200,
     loop: true,
-    callback: () => spawnFish(this)
-  });
-
-  // Klik untuk turunin kail
-  this.input.on('pointerdown', () => {
-    if (!isDropping) {
-      isDropping = true;
-      hook.setVelocityY(250);
+    callback: () => {
+      if (!gameOver) spawnFish(this);
     }
   });
 
-  // Score
-  scoreText = this.add.text(10, 10, 'Score: 0', {
-    font: '20px Arial',
-    fill: '#000'
+  // Timer
+  this.time.addEvent({
+    delay: 1000,
+    loop: true,
+    callback: () => {
+      if (!gameOver) {
+        timeLeft--;
+        timeText.setText('Time: ' + timeLeft);
+
+        if (timeLeft <= 0) {
+          statusText.setText('WAKTU HABIS!');
+          endGame();
+        }
+      }
+    }
   });
 
-  // Collision
+  // Klik turunin kail
+  this.input.on('pointerdown', () => {
+    if (!isDropping && !gameOver) {
+      isDropping = true;
+      caughtThisDrop = false;
+      hook.setVelocityY(260);
+    }
+  });
+
+  scoreText = this.add.text(10, 10, 'Score: 0', { font: '20px Arial', fill: '#000' });
+  targetText = this.add.text(10, 35, 'Target: ' + target, { font: '20px Arial', fill: '#000' });
+  livesText = this.add.text(10, 60, 'Lives: 3', { font: '20px Arial', fill: '#000' });
+  timeText = this.add.text(10, 85, 'Time: 30', { font: '20px Arial', fill: '#000' });
+
+  statusText = this.add.text(400, 300, '', {
+    font: '42px Arial',
+    fill: '#ff0000'
+  }).setOrigin(0.5);
+
   this.physics.add.overlap(hook, fishes, catchFish, null, this);
 }
 
 function update() {
-  // Kalau kail sampai bawah
-  if (hook.y > 550) {
-    hook.setVelocityY(-250);
+  if (gameOver) return;
+
+  // Gerak kiri kanan
+  if (!isDropping) {
+    if (cursors.left.isDown) hook.x -= 5;
+    if (cursors.right.isDown) hook.x += 5;
   }
 
-  // Kalau kail balik ke atas
+  // Sampai bawah
+  if (hook.y > 550) {
+    if (!caughtThisDrop) {
+      lives--;
+      livesText.setText('Lives: ' + lives);
+
+      if (lives <= 0) {
+        statusText.setText('GAME OVER');
+        endGame();
+      }
+    }
+    hook.setVelocityY(-260);
+  }
+
+  // Balik atas
   if (hook.y <= 120 && isDropping) {
     hook.setVelocityY(0);
     hook.y = 120;
@@ -90,30 +132,51 @@ function update() {
 }
 
 function spawnFish(scene) {
-  let y = Phaser.Math.Between(200, 550);
-  let fish = fishes.create(Phaser.Math.Between(0, 800), y, 'fish')
-    .setScale(0.3);
+  let y = Phaser.Math.Between(220, 550);
+  let fish = fishes.create(Phaser.Math.Between(0, 800), y, 'fish');
 
-  let speed = Phaser.Math.Between(50, 120);
-  let direction = Phaser.Math.Between(0, 1);
+  let isBig = Phaser.Math.Between(0, 3) === 0;
 
-  if (direction === 0) {
+  if (isBig) {
+    fish.setScale(0.45);
+    fish.points = 3;
+  } else {
+    fish.setScale(0.25);
+    fish.points = 1;
+  }
+
+  let speed = Phaser.Math.Between(60, 140);
+  let dir = Phaser.Math.Between(0, 1);
+
+  if (dir === 0) {
     fish.setVelocityX(speed);
     fish.setFlipX(true);
   } else {
     fish.setVelocityX(-speed);
   }
-
-  fish.setCollideWorldBounds(false);
 }
 
 function catchFish(hook, fish) {
+  if (gameOver) return;
+
+  caughtThisDrop = true;
+  score += fish.points;
   fish.destroy();
-  score += 10;
+
   scoreText.setText('Score: ' + score);
 
-  // Kail langsung naik
-  hook.setVelocityY(-250);
+  hook.setVelocityY(-260);
+
+  if (score >= target) {
+    statusText.setText('MENANG!');
+    endGame();
+  }
+}
+
+function endGame() {
+  gameOver = true;
+  hook.setVelocity(0);
+  fishes.clear(true, true);
 }
 </script>
 
